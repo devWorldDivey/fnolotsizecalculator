@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>F&O Lot Completion Calculator</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 20px; background-color: #f4f7f6; color: #333; display: flex; flex-direction: column; align-items: center; }
+        .container { width: 100%; max-width: 1100px; background-color: #ffffff; padding: 30px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h1, h2 { text-align: center; color: #2c3e50; margin-bottom: 20px; }
+        .data-source { text-align: center; margin-bottom: 20px; font-size: 1em; }
+        .data-source a { color: #3498db; font-weight: bold; }
+        .step-box { text-align: center; padding: 20px; border: 2px dashed #3498db; border-radius: 8px; margin-bottom: 30px; background-color: #ecf0f1; }
+        #csv-file-input { display: none; }
+        .action-button { cursor: pointer; padding: 10px 20px; background-color: #3498db; color: white; border-radius: 5px; font-weight: bold; border: none; font-size: 16px; transition: background-color 0.2s; }
+        .action-button:hover { background-color: #2980b9; }
+        .lookup-button { cursor: pointer; padding: 6px 12px; background-color: #2ecc71; color: white; border-radius: 4px; border: none; font-size: 12px; }
+        #file-name { margin-top: 10px; font-style: italic; color: #555; }
+        #table-container { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px 15px; text-align: left; vertical-align: middle; border-bottom: 1px solid #ddd; white-space: nowrap; }
+        thead th { background-color: #3498db; color: #ffffff; font-weight: bold; position: sticky; top: 0; z-index: 10; }
+        .sortable-header { cursor: pointer; }
+        .sortable-header:hover { background-color: #2980b9; }
+        tbody tr:nth-of-type(even) { background-color: #f9f9f9; }
+        .number-input { width: 100px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; text-align: right; }
+        .text-input { width: 200px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; text-align: left;}
+        .amount-needed { font-weight: bold; text-align: right; }
+        .full-lot { color: #27ae60; font-weight: bold; text-align: right;}
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>F&O Lot Completion Calculator</h1>
+        <p class="data-source">
+            Uses Lot Size specifications from the official source: <a href="https://www.nseindia.com/products-services/equity-derivatives-contract-information" target="_blank" rel="noopener noreferrer">NSE India</a>
+        </p>
+
+        <div class="step-box">
+            <h2>Step 1: Upload the official `fo_mktlots.csv` file</h2>
+            <label for="csv-file-input" id="upload-label" class="action-button">Click to Upload</label>
+            <input type="file" id="csv-file-input" accept=".csv">
+            <p id="file-name">No file selected</p>
+        </div>
+
+        <div class="step-box" id="filter-box" style="display: none;">
+            <h2>Step 2: Filter and Calculate</h2>
+            <input type="text" id="symbol-filter-input" class="text-input" placeholder="Filter by Symbol...">
+        </div>
+        
+        <div id="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>S.No.</th>
+                        <th>Stock Name</th>
+                        <th>Symbol</th>
+                        <th class="sortable-header" id="lot-size-header">Lot Size <span id="sort-icon"></span></th>
+                        <th>Shares You Have</th>
+                        <th>Enter LTP (Manual)</th>
+                        <th>Amount Needed for 1 Lot</th>
+                    </tr>
+                </thead>
+                <tbody id="stock-data">
+                    <tr><td colspan="7" style="text-align:center; padding: 20px;">Please upload a file to begin.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('csv-file-input');
+        const fileNameDisplay = document.getElementById('file-name');
+        const tableBody = document.getElementById('stock-data');
+        const lotSizeHeader = document.getElementById('lot-size-header');
+        const filterBox = document.getElementById('filter-box');
+        let isSortAscending = true;
+
+        fileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+            fileNameDisplay.textContent = `Selected File: ${file.name}`;
+            const reader = new FileReader();
+            reader.onload = (e) => prepareTable(e.target.result);
+            reader.readAsText(file);
+        });
+
+        function prepareTable(csvData) {
+            tableBody.innerHTML = '';
+            const rows = csvData.trim().split('\n');
+            const headers = rows[0].trim().split(',');
+            const nameIndex = 0, symbolIndex = 1, lotSizeIndex = 2;
+
+            lotSizeHeader.innerHTML = `${headers[lotSizeIndex].trim()} <span id="sort-icon">↕</span>`;
+
+            let sno = 1;
+            for (let i = 1; i < rows.length; i++) {
+                const columns = rows[i].trim().split(',');
+                if (columns.length > lotSizeIndex) {
+                    const stockName = columns[nameIndex].trim();
+                    const ticker = columns[symbolIndex].trim();
+                    const lotSize = columns[lotSizeIndex].trim();
+                    if (ticker && lotSize && stockName && ticker.toUpperCase() !== 'SYMBOL') {
+                        const row = document.createElement('tr');
+                        row.dataset.ticker = ticker; // Save ticker for auto-save
+                        row.innerHTML = `
+                            <td>${sno}</td>
+                            <td>${stockName}</td>
+                            <td class="symbol">${ticker}</td>
+                            <td class="lot-size">${lotSize}</td>
+                            <td><input type="number" class="number-input shares-have-input" placeholder="0"></td>
+                            <td>
+                                <input type="number" class="number-input ltp-input" placeholder="0.00" style="margin-right: 5px;">
+                                <button class="lookup-button" data-ticker="${ticker}">Look Up</button>
+                            </td>
+                            <td class="amount-needed">₹ 0.00</td>
+                        `;
+                        tableBody.appendChild(row);
+                        loadSavedDataForRow(ticker, row);
+                        sno++;
+                    }
+                }
+            }
+            filterBox.style.display = 'block';
+            addEventListenersToControls();
+        }
+        
+        function addEventListenersToControls() {
+            document.querySelectorAll('.shares-have-input, .ltp-input').forEach(input => input.addEventListener('input', calculateAmountNeeded));
+            document.querySelectorAll('.lookup-button').forEach(button => button.addEventListener('click', generateGoogleLink));
+            document.getElementById('symbol-filter-input').addEventListener('input', applySymbolFilter);
+            lotSizeHeader.addEventListener('click', sortTableByLotSize);
+        }
+
+        function calculateAmountNeeded(event) {
+            const parentRow = event.target.closest('tr');
+            
+            const lotSize = parseInt(parentRow.querySelector('.lot-size').textContent.replace(/,/g, '')) || 0;
+            const sharesHave = parseInt(parentRow.querySelector('.shares-have-input').value) || 0;
+            const ltp = parseFloat(parentRow.querySelector('.ltp-input').value) || 0;
+            const amountNeededElement = parentRow.querySelector('.amount-needed');
+            
+            const sharesNeeded = lotSize - sharesHave;
+
+            if (sharesNeeded <= 0) {
+                amountNeededElement.textContent = `Full Lot Acquired`;
+                amountNeededElement.className = 'full-lot';
+            } else {
+                const amountNeeded = sharesNeeded * ltp;
+                amountNeededElement.textContent = `₹ ${amountNeeded.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                amountNeededElement.className = 'amount-needed';
+            }
+            
+            saveDataForRow(parentRow);
+        }
+
+        function generateGoogleLink(event) {
+            const ticker = event.target.dataset.ticker;
+            window.open(`https://www.google.com/finance/quote/${ticker}:NSE`, '_blank');
+        }
+
+        function sortTableByLotSize() {
+            const rows = Array.from(tableBody.querySelectorAll('tr'));
+            rows.sort((a, b) => {
+                const valA = parseInt(a.querySelector('.lot-size').textContent.replace(/,/g, ''));
+                const valB = parseInt(b.querySelector('.lot-size').textContent.replace(/,/g, ''));
+                return isSortAscending ? valA - valB : valB - valA;
+            });
+            rows.forEach(row => tableBody.appendChild(row));
+            isSortAscending = !isSortAscending;
+            document.getElementById('sort-icon').textContent = isSortAscending ? '▼' : '▲';
+        }
+
+        function applySymbolFilter(event) {
+            const filterValue = event.target.value.toUpperCase();
+            tableBody.querySelectorAll('tr').forEach(row => {
+                const rowSymbol = row.querySelector('.symbol').textContent.toUpperCase();
+                row.style.display = rowSymbol.includes(filterValue) ? '' : 'none';
+            });
+        }
+        
+        // --- DATA PERSISTENCE FUNCTIONS ---
+        function saveDataForRow(row) {
+            const ticker = row.dataset.ticker;
+            const data = {
+                sharesHave: row.querySelector('.shares-have-input').value,
+                ltp: row.querySelector('.ltp-input').value,
+            };
+            localStorage.setItem(ticker, JSON.stringify(data));
+        }
+
+        function loadSavedDataForRow(ticker, row) {
+            const savedData = localStorage.getItem(ticker);
+            if (savedData) {
+                const data = JSON.parse(savedData);
+                const sharesInput = row.querySelector('.shares-have-input');
+                const ltpInput = row.querySelector('.ltp-input');
+                
+                sharesInput.value = data.sharesHave || '';
+                ltpInput.value = data.ltp || '';
+                
+                // Trigger calculation with loaded data
+                calculateAmountNeeded({ target: ltpInput });
+            }
+        }
+    </script>
+
+</body>
+</html>
