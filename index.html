@@ -33,6 +33,9 @@
         .sortable-header:hover {
             background-color: #0b5ed7;
         }
+        .filter-controls {
+             display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 1rem;
+        }
     </style>
 </head>
 <body>
@@ -54,7 +57,10 @@
 
         <div class="step-box p-4 rounded-3 my-4" id="filter-box" style="display: none;">
             <h2>Step 2: Filter and Calculate</h2>
-            <input type="text" id="symbol-filter-input" class="form-control form-control-lg mx-auto" style="max-width: 400px;" placeholder="Filter by Symbol...">
+            <div class="filter-controls">
+                <input type="text" id="symbol-filter-input" class="form-control form-control-lg" style="max-width: 300px;" placeholder="Filter by Symbol...">
+                <button id="recalculate-btn" class="btn btn-secondary btn-lg">Recalculate All</button>
+            </div>
         </div>
         
         <div class="table-responsive">
@@ -126,7 +132,8 @@
                                     <button class="btn btn-success lookup-button" data-ticker="${ticker}">Look Up</button>
                                 </div>
                             </td>
-                            <td class="amount-needed">₹ 0.00</td>
+                            <!-- GIVING A STABLE CLASS 'calculation-cell' TO FIX THE BUG -->
+                            <td class="amount-needed calculation-cell">₹ 0.00</td>
                         `;
                         tableBody.appendChild(row);
                         loadSavedDataForRow(ticker, row);
@@ -138,39 +145,50 @@
             addEventListenersToControls();
         }
         
-        // --- THIS IS THE CORRECTED REFRESH LOGIC ---
         function addEventListenersToControls() {
-            // A single handler for any input change
-            const handleInputChange = (event) => {
-                const parentRow = event.target.closest('tr');
-                calculateAmountNeeded(parentRow);
-            };
-
-            document.querySelectorAll('.shares-have-input, .ltp-input').forEach(input => {
-                input.addEventListener('input', handleInputChange);
+            tableBody.addEventListener('input', (event) => {
+                if (event.target.classList.contains('shares-have-input') || event.target.classList.contains('ltp-input')) {
+                    calculateAmountNeeded(event.target.closest('tr'));
+                }
             });
-            document.querySelectorAll('.lookup-button').forEach(button => button.addEventListener('click', generateGoogleLink));
+
+            tableBody.addEventListener('click', (event) => {
+                 if (event.target.classList.contains('lookup-button')) {
+                    generateGoogleLink(event);
+                }
+            });
+            
+            document.getElementById('recalculate-btn').addEventListener('click', () => {
+                tableBody.querySelectorAll('tr').forEach(row => calculateAmountNeeded(row));
+                alert('All rows have been recalculated!');
+            });
+            
             document.getElementById('symbol-filter-input').addEventListener('input', applySymbolFilter);
             lotSizeHeader.addEventListener('click', sortTableByLotSize);
         }
 
+        // --- THIS IS THE FINAL, CORRECTED CALCULATION LOGIC ---
         function calculateAmountNeeded(parentRow) {
             if (!parentRow) return;
+            // Use the stable class 'calculation-cell' to always find the element
+            const amountNeededElement = parentRow.querySelector('.calculation-cell');
+            if (!amountNeededElement) return; // Defensive check
 
             const lotSize = parseInt(parentRow.querySelector('.lot-size').textContent.replace(/,/g, '')) || 0;
             const sharesHave = parseInt(parentRow.querySelector('.shares-have-input').value) || 0;
             const ltp = parseFloat(parentRow.querySelector('.ltp-input').value) || 0;
-            const amountNeededElement = parentRow.querySelector('.amount-needed');
             
             const sharesNeeded = lotSize - sharesHave;
 
             if (sharesNeeded <= 0) {
                 amountNeededElement.textContent = `Full Lot Acquired`;
-                amountNeededElement.className = 'full-lot';
+                // Set the correct class, ensuring the stable class is kept
+                amountNeededElement.className = 'calculation-cell full-lot';
             } else {
                 const amountNeeded = sharesNeeded * ltp;
                 amountNeededElement.textContent = `₹ ${amountNeeded.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-                amountNeededElement.className = 'amount-needed';
+                // Set the correct class, ensuring the stable class is kept
+                amountNeededElement.className = 'calculation-cell amount-needed';
             }
             saveDataForRow(parentRow);
         }
@@ -203,6 +221,7 @@
         
         function saveDataForRow(row) {
             const ticker = row.dataset.ticker;
+            if (!ticker) return;
             const data = {
                 sharesHave: row.querySelector('.shares-have-input').value,
                 ltp: row.querySelector('.ltp-input').value,
