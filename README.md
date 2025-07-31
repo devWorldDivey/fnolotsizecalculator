@@ -5,7 +5,7 @@ A simple yet powerful web-based tool designed for Indian F&O traders to quickly 
 **Live Demo:** **[https://devworlddivey.github.io/fnolotsizecalculator/](https://devworlddivey.github.io/fnolotsizecalculator/)**
 *(Note: Your site may take a few minutes to become active after the initial setup.)*
 
-![App Screenshot](screenshot.png)
+![App Screenshot](image.png)
 *(To add a screenshot: take a picture of your running application, name it `screenshot.png`, and place it in the same project folder. It will automatically appear here.)*
 
 ## Features
